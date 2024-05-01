@@ -5,7 +5,8 @@ library(DemoTools)
 library(geomtextpath)
 library(DDSQLtools)
 library(devtools)
-load_all(path = "C:/Proyectos/DemoKin")
+library(kableExtra)
+# load_all(path = "C:/Proyectos/DemoKin") # developing version of Demokin
 options(tibble.print_min=50)
 
 # download data and save --------------------------------------------------
@@ -164,7 +165,7 @@ kin_net_country_years <- map_df(1:nrow(country_years) , function(i){
   return(kin_out)
 })
 # save(kin_net_country_years, file = "data/kin_net_country_years.rda")
-load("T1 - Bereavement measures/data/kin_net_country_years.rda")
+load("data/kin_net_country_years.rda")
 
 # plot kin counts
 plot_kin_net_country_years <- kin_net_country_years %>% 
@@ -198,45 +199,18 @@ summary_kin_net_country_years <- kin_net_country_years %>%
 # main and other indicators
 bereavement_indicators <- function(kin_net, x_focal, age_unexp, support_group){
   
-  # load("T1 - Bereavement measures/data/kin_net_country_years.rda")
+  # load("data/kin_net_country_years.rda")
   # kin_net <- kin_net_country_years %>%
   #   filter(country == "Argentina", year == 1950)
   # x_focal <- 0
   # age_unexp <- 30
   # support_group <- c("s","m")
   
-  # kin ever met
-  ever_met <- kin_net %>%
-    summarise(D = sum(dead[age_focal<x_focal]),
-              l = sum(living[age_focal==x_focal]),
-              .by = kin) %>% 
-    mutate(L = D+l)
-  
-  # total death experience by age
-  death_experienced <- kin_net  %>% 
-    summarise(D = sum(dead), .by = c(age_focal)) %>% 
-    mutate(D_cum = cumsum(D),
-           D_porc = D/sum(D),
-           D_porc_acum = cumsum(D_porc)) %>% 
-    as.data.frame()
-  
-  # death in the future by kin
-  death_to_experience <- kin_net  %>% 
-    filter(age_focal >= x_focal) %>% 
-    group_by(kin, age_focal) %>% 
-    summarise(d = sum(dead)) %>% 
-    group_by(kin) %>% 
-    mutate(D = cumsum(d)) %>% 
-    as.data.frame()
-  
   # define age and get indicators
   ex_focal <- kin_net %>% filter(age_focal==x_focal) %>% pull(ex_focal) %>% unique
   lx_focal <- kin_net %>% distinct(age_focal, px_focal)
   lx_focal$cum_px_focal <- cumprod(lx_focal$px_focal)
-  lx_focal$lx_focal <-c(1, lx_focal$cum_px_focal[-101])
-  
-  # types of kin
-  kin_types <- unique(kin_net$kin)
+  lx_focal$lx_focal <-c(1, lx_focal$cum_px_focal[-nrow(lx_focal)])
   
   # T time expected in bereavement
   T2 <- kin_net %>% 
@@ -303,16 +277,35 @@ bereavement_indicators <- function(kin_net, x_focal, age_unexp, support_group){
     mutate(S = S1 + S2 + S3)
   
   # M portion time in bereavement
-  M <- kin_net %>% 
-    filter(age_focal < x_focal) %>% 
-    summarise(M = 1-sum(dead*age_focal)/sum(dead)/x_focal, 
+  omega <- max(kin_net$age_focal)
+  M_prosp <- kin_net %>% 
+    filter(age_focal >= x_focal) %>% 
+    summarise(M_prosp = 1 - sum(dead*(age_focal-x_focal))/sum(dead)/(omega-x_focal), 
               .by = c(kin))
   
-  # U Non-expected proportion of deaths: age definition
-  U <- kin_net  %>% 
-    filter(age_focal >= x_focal) %>% 
-    summarise(U = sum(dead[age_kin<age_unexp])/sum(dead), .by = kin)
+  if(x_focal > 0){
+    M_retr <- kin_net %>% 
+      filter(age_focal < x_focal) %>% 
+      summarise(M_retr = 1-sum(dead*age_focal)/sum(dead)/x_focal, 
+                .by = c(kin))
+  }else{
+    M_retr <- M_prosp %>% mutate(M_retr = 0) %>% select(-M_prosp)
+  }
   
+  # U Non-expected proportion of deaths: age definition
+  omega <- max(kin_net$age_focal)
+  U_prosp <- kin_net  %>% 
+    filter(age_focal > x_focal) %>% 
+    summarise(U_prosp = sum(dead[age_kin<age_unexp])/sum(dead), .by = kin) 
+
+  if(x_focal > 0){
+    U_retr <- kin_net  %>% 
+      filter(age_focal < x_focal) %>% 
+      summarise(U = sum(dead[age_kin<age_unexp])/sum(dead), .by = kin)
+  }else{
+    U_retr <- U_prosp %>% mutate(U_retr = 0) %>% select(-U_prosp)
+  }
+ 
   # O overlapping/unnatural: ggm>gm, gm>m, m>s, m>d, a>d, d>gd, gd>ggd, a>c, c>d
   O <- kin_net  %>% 
     filter(age_focal>=x_focal) %>% 
@@ -364,25 +357,23 @@ bereavement_indicators <- function(kin_net, x_focal, age_unexp, support_group){
   L <- kin_net  %>% 
     filter(age_focal>=x_focal) %>% 
     summarise(L = sum(living[kin %in% support_group]), .by = c(age_focal)) %>% 
-    arrange(L) %>% slice(1) %>% select(L = age_focal)
-  L <- expand.grid(kin = kin_types, L = L$L)
+    arrange(L) %>% slice(1)
+  L <- expand.grid(kin = kin_types, L = L$age_focal, L_living = L$L)
     
   ## indicators
   bereav_indicators <- T. %>% 
     left_join(S) %>% 
-    left_join(M) %>% 
-    left_join(U) %>% 
+    left_join(M_retr) %>% 
+    left_join(M_prosp) %>% 
+    left_join(U_retr) %>% 
+    left_join(U_prosp) %>%
     left_join(O) %>% 
     left_join(P) %>% 
     left_join(H) %>% 
     left_join(L)
 
   # out
-  return(list(bereav_indicators = bereav_indicators,
-              others = list(ever_met = ever_met,
-                            death_experienced = death_experienced,
-                            death_to_experience = death_to_experience))
-         )
+  return(bereav_indicators)
 }
 
 # extra information to characterize kin
@@ -416,8 +407,9 @@ extra_information <- function(kin_net){
 
 # compute indicators ------------------------------------------------------
 
-load("T1 - Bereavement measures/data/kin_net_country_years.rda")
+load("data/kin_net_country_years.rda")
 
+# extra info
 country_year <- kin_net_country_years %>% distinct(country, year)
 country_year_extra_information <- map_df(1:nrow(country_year),
                                       # i = 4
@@ -435,8 +427,10 @@ country_year_extra_information <- map_df(1:nrow(country_year),
                                                  year = country_year$year[i], 
                                                  .before = 1)
 })
-save(country_year_extra_information, file = "T1 - Bereavement measures/data/country_year_extra_information.rda")
+save(country_year_extra_information, 
+     file = "data/country_year_extra_information.rda")
 
+# indicators
 country_year_age <- kin_net_country_years %>%
   distinct(country, year) %>%
   cross_join(data.frame(age = c(0, 30, 60)))
@@ -452,14 +446,14 @@ country_year_age_indicators <- map_df(1:nrow(country_year_age),
                                              age_unexp = 30, # to define 
                                              support_group = c("s","m") # to define dinamically
                                            )
-                                           bereavement_indicators_i$bereav_indicators %>% 
+                                           bereavement_indicators_i %>% 
                                              mutate(country = country_year_age$country[i],
                                                     year = country_year_age$year[i], 
                                                     age = country_year_age$age[i], 
                                                     .before = 1)
                                          })
 save(country_year_age_indicators, 
-     file = "T1 - Bereavement measures/data/country_year_age_indicators.rda")
+     file = "data/country_year_age_indicators.rda")
 
 # analysis paper----------------------------------------------------------------
 
@@ -474,7 +468,7 @@ arg2015_bereavement <- country_year_age_indicators %>% ungroup %>%
   filter(kin %in% c("gm", "m", "d", "s")) %>%
   left_join(arg2015_extrainfo %>% distinct(age = age_focal, ex_focal))
 table_arg2015_bereavement <- arg2015_bereavement %>% 
-  select(age, ex_focal, kin, `T` = T., S, M, U, O) %>%  #, P, H, L) %>% 
+  select(age, ex_focal, kin, `T` = T., S, M = M_prosp, U = U_prosp, O) %>%  #, P, H, L) %>% 
   arrange(age, kin) %>% 
   kbl(align = "c", booktabs = T, format = "latex", digits = 2)
 
@@ -482,7 +476,7 @@ table_arg2015_bereavement <- arg2015_bereavement %>%
 plot_arg_guatem_1950_2015 <- country_year_age_indicators %>% 
   ungroup %>% 
   filter(kin %in% c("gm", "m", "d", "s")) %>% 
-  select(country, year, age, kin, `T` = T., S, M, U, O) %>% 
+  select(country, year, age, kin, `T` = T., S, M = M_prosp, U = U_prosp, O) %>% 
   pivot_longer(`T`:O, names_to = "Indicator", values_to = "Value") %>% 
   ggplot(aes(age, Value, col = country, linetype = factor(year))) +
   geom_line() + geom_point() +
@@ -496,7 +490,7 @@ plot_arg_guatem_1950_2015 <- country_year_age_indicators %>%
   facet_grid(rows = vars(Indicator), col = vars(kin), 
              scales = "free", switch = "y", as.table = T)
 ggsave(plot = plot_arg_guatem_1950_2015, 
-       filename = "T1 - Bereavement measures/plots/plot_arg_guatem_1950_2015.pdf") 
+       filename = "plots/plot_arg_guatem_1950_2015.pdf") 
 
 # plots -------------------------------------------------------------------
 
@@ -609,6 +603,7 @@ plot_kin_arg_2010 <- kin_net_years[[4]]  %>%
 ggsave(plot = plot_kin_arg_2010, filename = "plots/kin_arg_2010.pdf")
 
 load("data/arg_bereav_years.rda")
-kable(arg_bereav_years %>% filter(year == 2010), digits = 2, caption = "Bereavement indicators in a female-dominant population under 2015 demographic conditions")
+kable(arg_bereav_years %>% filter(year == 2010), digits = 2, 
+      caption = "Bereavement indicators in a female-dominant population under 2015 demographic conditions")
 
 # end ---------------------------------------------------------------------
