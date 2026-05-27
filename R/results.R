@@ -1,4 +1,4 @@
-# compute kin bereavement measures for Argentina
+# compute kin bereavement measures for Argentina and Guatemala
 
 library(tidyverse)
 library(DemoTools)
@@ -9,9 +9,9 @@ library(DDSQLtools)
 source("R/funs.R")
 options(tibble.print_min=30)
 
-# download data and save --------------------------------------------------
+# get data and plot demographics --------------------------------------------------
 
-# Guatemala, Argentina and LAC
+# LA locations
 get_locations()
 all_LAC_loc <- c(
   32, 68, 76, 152, 170, 188, 192, 214, 218, 222,
@@ -63,7 +63,7 @@ save(lt_female |> filter(LocID %in% my_locations),
         lt_male |> filter(LocID %in% my_locations), 
         asfr |> filter(LocID %in% my_locations), file = "data/demo_data.rda")
 
-# build kin network --------------------------------------------------------
+# build kinship network --------------------------------------------------------
 
 load("data/demo_data.rda")
 
@@ -121,8 +121,9 @@ kin_death <- kin_net_country_years %>%
                          kin == "gm" ~ "Granparents", T ~ "Other"),
          year = as.character(year)) 
 
-# plot
+# cohort
 cohort_example <- 1950
+
 # e0 cohort
 e0_df <- lt_female %>% 
   filter(Location %in% countries) %>%
@@ -134,6 +135,7 @@ e0_df <- lt_female %>%
          ex = rev(cumsum(rev(S))) / S, .by = c(country, cohort, sex)) |> 
   filter(cohort == cohort_example, sex == "f", age == 0)
 
+# plot
 plot_death_kin <- kin_death %>% 
   filter(age_focal < 80) %>%
   ggplot(aes(age_focal, D, col = kin, label = kin)) +
@@ -211,7 +213,7 @@ e0x <- map_df(
     }
 )
 
-### Burden
+# Burden
 
 plot_data <- kin_net_country_years %>% 
   filter(cohort == cohort_example) %>% 
@@ -264,7 +266,7 @@ ggsave(filename = "plots/plot_I.pdf",
        plot = plot_B, 
        width = 8, height = 6)
 
-### Shared Time
+# Shared Time
 
 table_S <- kin_net_country_years |> 
   arrange(country, cohort, age_focal, kin) |> 
@@ -289,7 +291,7 @@ table_S <- kin_net_country_years |>
   filter(Labels_2sex  %in% c("Children", "Siblings", "Parents", "Grandparents")) |> 
   select(Country = country, Kin = Labels_2sex, D_e0, S, S_mean)
 
-
+# table
 library(kableExtra)
 table_S |>
   mutate(
@@ -308,8 +310,7 @@ table_S |>
   ) |>
   collapse_rows(columns = 1, valign = "top", latex_hline = "major")
 
-
-### Overlapping
+# Overlapping
 
 # overlapping m and ggm
 O_data <- kin_net_country_years %>% 
@@ -350,6 +351,7 @@ ddistr <- bind_rows(
   left_join(demokin_codes %>% 
               rename(kin = DemoKin))
  
+# table
 O_table <- left_join(
   ddistr %>% 
     summarise(D = sum(`d(x)`), 
@@ -359,6 +361,7 @@ O_table <- left_join(
               dTotal = sum(total), 
               Overl = dOverl*2/dTotal, .by = c(Related, country)))
 
+# plot
 O_labels <- O_table %>% 
   distinct(Related, country, Overl) %>% 
   mutate(
@@ -366,7 +369,6 @@ O_labels <- O_table %>%
     label_y = Inf,
     label = paste0(round(Overl*100, 0), "%")
   )
-
 O_plot <- ggplot() +
   geom_area(
     data = overl,
@@ -411,7 +413,10 @@ ggsave(filename = "plots/O_plot.pdf",
        plot = O_plot, 
        width = 8, height = 6)
 
-#
+
+# end --------------------------------------------------------------------
+
+
 
 
 

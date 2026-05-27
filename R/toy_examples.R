@@ -1,10 +1,12 @@
+# toy examples for presentation
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(patchwork)
 library(geomtextpath)
 
-# Shared time toy example ------------------------------------------------
+# Shared time ------------------------------------------------
 kin_lines <- data.frame(
   kin = c("Grandparent", "Grandparent", "Parent", "Parent", rep("Children", 3), "Sibling"),
   x_focal     = c(-15, -15,     -15, -15,            20, 25, 30,            5),
@@ -35,16 +37,17 @@ ggsave(filename = "plots/plot_kin_lines.pdf",
        plot = plot_kin_lines, 
        width = 8, height = 6)
 
-# Overlapping toy example ------------------------------------------------
+# Overlapping ------------------------------------------------
 
+# gammas
 x <- seq(0, 90, by = 0.1)
-
 dgamma_mean_sd <- function(x, mean, sd) {
   shape <- (mean / sd)^2
   scale <- sd^2 / mean
   dgamma(x, shape = shape, scale = scale)
 }
 
+# function to make data for each panel
 make_panel_data <- function(mu_m, mu_gm, sd_m, sd_gm, panel_name) {
   
   wide <- tibble(
@@ -125,9 +128,7 @@ ggsave(filename = "plots/Oplot_toy.pdf",
        plot = Oplot_toy, 
        width = 8, height = 6)
 
-
-
-# Burden toy example ------------------------------------------------
+# Burden ------------------------------------------------
 
 library(ggplot2)
 library(patchwork)
